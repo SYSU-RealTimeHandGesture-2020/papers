@@ -205,5 +205,4 @@ dependencies:
     - transforms3d==0.3.1
     - urllib3==1.23
     - vidaug==0.1
-prefix: /home/fan/anaconda3/envs/keras
 
