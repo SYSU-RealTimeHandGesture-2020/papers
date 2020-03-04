@@ -13,7 +13,7 @@ class HandTracker():
         palm_model: path to the palm_detection.tflite
         joint_model: path to the hand_landmark.tflite
         anchors_path: path to the csv containing SSD anchors
-    Ourput:
+    Output:
         (21,2) array of hand joints.
     Examples::
         >>> det = HandTracker(path1, path2, path3)
@@ -63,6 +63,7 @@ class HandTracker():
                         [256, 256, 1],
                         [  0, 256, 1],
                     ])
+        print('hand tracker built ok')
     
     def _get_triangle(self, kp0, kp2, dist=1):
         """get a triangle used to calculate Affine transformation matrix"""
@@ -105,7 +106,7 @@ class HandTracker():
         self.interp_joint.invoke()
 
         joints = self.interp_joint.get_tensor(self.out_idx_joint)
-        return joints.reshape(-1,2)
+        return joints.reshape(-1,2) # 2d-->3d
 
     def detect_hand(self, img_norm):
         assert -1 <= img_norm.min() and img_norm.max() <= 1,\
@@ -127,8 +128,8 @@ class HandTracker():
         candidate_anchors = self.anchors[detecion_mask]
 
         if candidate_detect.shape[0] == 0:
-            print("No hands found")
-            return None, None, None
+#             print("No hands found")
+            return None, None
         # picking the widest suggestion while NMS is not implemented
         max_idx = np.argmax(candidate_detect[:, 3])
 
@@ -184,7 +185,7 @@ class HandTracker():
         )
         
         joints = self.predict_joints(img_landmark)
-        
+        joints2d = joints[:,:2]
         # adding the [0,0,1] row to make the matrix square
         Mtr = self._pad1(Mtr.T).T
         Mtr[2,:2] = 0
@@ -192,9 +193,12 @@ class HandTracker():
         Minv = np.linalg.inv(Mtr)
 
         # projecting keypoints back into original image coordinate space
-        kp_orig = (self._pad1(joints) @ Minv.T)[:,:2]
+        kp_orig = (self._pad1(joints2d) @ Minv.T)[:,:2]
         box_orig = (self._target_box @ Minv.T)[:,:2]
         kp_orig -= pad[::-1]
         box_orig -= pad[::-1]
         
+        # add the z coordinate
+        # col = np.array(joints[:,2])
+        # kp_orig = np.insert(kp_orig, 2, values=col, axis=1)
         return kp_orig, box_orig
