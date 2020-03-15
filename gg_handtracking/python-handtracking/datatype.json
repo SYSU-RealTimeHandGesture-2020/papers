@@ -1,0 +1,60 @@
+
+palm tensor input 信息 
+[
+    {
+        'name': 'input_1', 
+        'index': 234, 
+        'shape': array([  1, 256, 256,   3]), 
+        'dtype': <class 'numpy.float32'>, 
+        'quantization': (0.0, 0)
+    }
+]
+
+palm tensor ouput 信息 
+[
+    {
+        'name': 'regressors/concat', 
+        'index': 295, 
+        'shape': array([   1, 2944,   18]), 
+        'dtype': <class 'numpy.float32'>, 
+        'quantization': (0.0, 0)
+    }, 
+    {
+        'name': 'classificators/concat', 
+        'index': 14, 
+        'shape': array([   1, 2944,    1]), 
+        'dtype': <class 'numpy.float32'>, 
+        'quantization': (0.0, 0)
+    }
+]
+
+landmark tensor input 信息 
+[
+    {
+        'name': 'input_1', 
+        'index': 0, 
+        'shape': array([  1, 256, 256,   3]), 
+        'dtype': <class 'numpy.float32'>, 
+        'quantization': (0.0, 0)
+    }
+]
+
+landmark tensor ouput 信息 
+[
+    {
+        'name': 'ld_21_2d', 
+        'index': 893, 
+        'shape': array([ 1, 42]), 
+        'dtype': <class 'numpy.float32'>, 
+        'quantization': (0.0, 0)
+    }, 
+    {
+        'name': 'output_handflag', 
+        'index': 894, 
+        'shape': array([1, 1]), 
+        'dtype': <class 'numpy.float32'>, 
+        'quantization': (0.0, 0)
+    }
+]
+
+hand tracker built ok

@@ -39,6 +39,9 @@ class HandTracker():
         # reading tflite model paramteres
         output_details = self.interp_palm.get_output_details()
         input_details = self.interp_palm.get_input_details()
+
+        print('palm tensor input 信息', input_details)
+        print('palm tensor ouput 信息', output_details)
         
         self.in_idx = input_details[0]['index']
         self.out_reg_idx = output_details[0]['index']
@@ -46,6 +49,10 @@ class HandTracker():
         
         self.in_idx_joint = self.interp_joint.get_input_details()[0]['index']
         self.out_idx_joint = self.interp_joint.get_output_details()[0]['index']
+        self.out_conf_joint = self.interp_joint.get_output_details()[1]['index'] # hand presence 评分
+
+        print('landmark tensor input 信息', self.interp_joint.get_input_details())
+        print('landmark tensor ouput 信 息', self.interp_joint.get_output_details())
 
         # 90° rotation matrix used to create the alignment trianlge        
         self.R90 = np.r_[[[0,1],[-1,0]]]
@@ -106,7 +113,9 @@ class HandTracker():
         self.interp_joint.invoke()
 
         joints = self.interp_joint.get_tensor(self.out_idx_joint)
-        return joints.reshape(-1,2) # 2d-->3d
+        confidence = self.interp_joint.get_tensor(self.out_conf_joint)
+        return joints.reshape(-1,2), confidence.reshape(1) # 2d-->3d
+
 
     def detect_hand(self, img_norm):
         assert -1 <= img_norm.min() and img_norm.max() <= 1,\
@@ -170,7 +179,7 @@ class HandTracker():
         
         source, keypoints = self.detect_hand(img_norm)
         if source is None:
-            return None, None
+            return None, None, None
 
         # calculating transformation from img_pad coords
         # to img_landmark coords (cropped hand image)
@@ -184,7 +193,7 @@ class HandTracker():
             self._im_normalize(img_pad), Mtr, (256,256)
         )
         
-        joints = self.predict_joints(img_landmark)
+        joints, confidence = self.predict_joints(img_landmark)
         joints2d = joints[:,:2]
         # adding the [0,0,1] row to make the matrix square
         Mtr = self._pad1(Mtr.T).T
@@ -201,4 +210,4 @@ class HandTracker():
         # add the z coordinate
         # col = np.array(joints[:,2])
         # kp_orig = np.insert(kp_orig, 2, values=col, axis=1)
-        return kp_orig, box_orig
+        return kp_orig, box_orig, confidence
