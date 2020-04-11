@@ -2,6 +2,7 @@ import csv
 import cv2
 import numpy as np
 import tensorflow as tf
+import time
 
 class HandTracker():
     r"""
@@ -30,7 +31,7 @@ class HandTracker():
         self.interp_palm.allocate_tensors()
         self.interp_joint = tf.lite.Interpreter(joint_model)
         self.interp_joint.allocate_tensors()
-        
+
         # reading the SSD anchors
         with open(anchors_path, "r") as csv_f:
             self.anchors = np.r_[
@@ -40,19 +41,19 @@ class HandTracker():
         output_details = self.interp_palm.get_output_details()
         input_details = self.interp_palm.get_input_details()
 
-        print('palm tensor input 信息', input_details)
-        print('palm tensor ouput 信息', output_details)
-        
+        # print('palm tensor input 信息', input_details)
+        # print('palm tensor ouput 信息', output_details)
+
         self.in_idx = input_details[0]['index']
         self.out_reg_idx = output_details[0]['index']
         self.out_clf_idx = output_details[1]['index']
-        
+
         self.in_idx_joint = self.interp_joint.get_input_details()[0]['index']
         self.out_idx_joint = self.interp_joint.get_output_details()[0]['index']
         self.out_conf_joint = self.interp_joint.get_output_details()[1]['index'] # hand presence 评分
 
-        print('landmark tensor input 信息', self.interp_joint.get_input_details())
-        print('landmark tensor ouput 信 息', self.interp_joint.get_output_details())
+        # print('landmark tensor input 信息', self.interp_joint.get_input_details())
+        # print('landmark tensor ouput 信 息', self.interp_joint.get_output_details())
 
         # 90° rotation matrix used to create the alignment trianlge        
         self.R90 = np.r_[[[0,1],[-1,0]]]
@@ -101,6 +102,13 @@ class HandTracker():
     @staticmethod
     def _sigm(x):
         return 1 / (1 + np.exp(-x) )
+
+
+    # def _sigm(x):
+    #     if x >= 0:      #对sigmoid函数的优化，避免了出现极大的数据溢出
+    #         return 1/(1+np.exp(-x))
+    #     else:
+    #         return np.exp(x)/(1+np.exp(x))
     
     @staticmethod
     def _pad1(x):
@@ -118,15 +126,20 @@ class HandTracker():
 
 
     def detect_hand(self, img_norm):
+        # print('hand detection start')
+        t1 = time.time()
         assert -1 <= img_norm.min() and img_norm.max() <= 1,\
         "img_norm should be in range [-1, 1]"
         assert img_norm.shape == (256, 256, 3),\
         "img_norm shape must be (256, 256, 3)"
 
+        t2 = time.time()
+        t1 = t2 - t1
         # predict hand location and 7 initial landmarks
         self.interp_palm.set_tensor(self.in_idx, img_norm[None])
         self.interp_palm.invoke()
-
+        t3 = time.time()
+        t2 = t3 - t2
         out_reg = self.interp_palm.get_tensor(self.out_reg_idx)[0]
         out_clf = self.interp_palm.get_tensor(self.out_clf_idx)[0,:,0]
 
@@ -145,11 +158,11 @@ class HandTracker():
         # bounding box offsets, width and height
         dx,dy,w,h = candidate_detect[max_idx, :4]
         center_wo_offst = candidate_anchors[max_idx,:2] * 256
-        
+
         # 7 initial keypoints
         keypoints = center_wo_offst + candidate_detect[max_idx,4:].reshape(-1,2)
         side = max(w,h) * self.box_enlarge
-        
+
         # now we need to move and rotate the detected hand for it to occupy a
         # 256x256 square
         # line from wrist keypoint to middle finger keypoint
@@ -157,6 +170,9 @@ class HandTracker():
         # TODO: replace triangle with the bbox directly
         source = self._get_triangle(keypoints[0], keypoints[2], side)
         source -= (keypoints[0] - keypoints[2]) * self.box_shift
+        t3 = time.time() - t3
+        # print('hand detection end', t1, t2, t3)
+
         return source, keypoints
 
     def preprocess_img(self, img):
@@ -169,18 +185,19 @@ class HandTracker():
             mode='constant')
         img_small = cv2.resize(img_pad, (256, 256))
         img_small = np.ascontiguousarray(img_small)
-        
+
         img_norm = self._im_normalize(img_small)
         return img_pad, img_norm, pad
 
 
     def __call__(self, img):
+        import time
         img_pad, img_norm, pad = self.preprocess_img(img)
-        
+        t2 = time.time()
         source, keypoints = self.detect_hand(img_norm)
+        t2 = time.time() - t2
         if source is None:
             return None, None, None
-
         # calculating transformation from img_pad coords
         # to img_landmark coords (cropped hand image)
         scale = max(img.shape) / 256
@@ -188,17 +205,17 @@ class HandTracker():
             source * scale,
             self._target_triangle
         )
-        
+
         img_landmark = cv2.warpAffine(
             self._im_normalize(img_pad), Mtr, (256,256)
         )
-        
+        t4 = time.time()
         joints, confidence = self.predict_joints(img_landmark)
+        t4 = time.time() - t4
         joints2d = joints[:,:2]
         # adding the [0,0,1] row to make the matrix square
         Mtr = self._pad1(Mtr.T).T
         Mtr[2,:2] = 0
-
         Minv = np.linalg.inv(Mtr)
 
         # projecting keypoints back into original image coordinate space
@@ -206,8 +223,8 @@ class HandTracker():
         box_orig = (self._target_box @ Minv.T)[:,:2]
         kp_orig -= pad[::-1]
         box_orig -= pad[::-1]
-        
         # add the z coordinate
         # col = np.array(joints[:,2])
         # kp_orig = np.insert(kp_orig, 2, values=col, axis=1)
+        # print(t2,  t4)
         return kp_orig, box_orig, confidence
